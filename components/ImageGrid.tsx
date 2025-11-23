@@ -5,9 +5,10 @@ import ImageCard from './ImageCard';
 interface ImageGridProps {
   concepts: VisualConcept[];
   images: Record<number, GeneratedImage>;
+  onRegenerate: (conceptId: number, comment?: string) => void;
 }
 
-const ImageGrid: React.FC<ImageGridProps> = ({ concepts, images }) => {
+const ImageGrid: React.FC<ImageGridProps> = ({ concepts, images, onRegenerate }) => {
   if (concepts.length === 0) return null;
 
   return (
@@ -16,7 +17,8 @@ const ImageGrid: React.FC<ImageGridProps> = ({ concepts, images }) => {
         <div key={concept.id} className="h-full">
           <ImageCard 
             concept={concept} 
-            imageState={images[concept.id] || { id: concept.id, loading: true }} 
+            imageState={images[concept.id] || { id: concept.id, loading: true }}
+            onRegenerate={onRegenerate}
           />
         </div>
       ))}

@@ -13,6 +13,36 @@ const App: React.FC = () => {
   const [images, setImages] = useState<Record<number, GeneratedImage>>({});
   const [globalError, setGlobalError] = useState<string | null>(null);
 
+  const handleRegenerate = useCallback(async (conceptId: number, comment?: string) => {
+    const concept = concepts.find(c => c.id === conceptId);
+    if (!concept) return;
+
+    // Set loading state for this specific image
+    setImages(prev => ({
+      ...prev,
+      [conceptId]: { id: conceptId, loading: true }
+    }));
+
+    try {
+      // Modify the prompt with the comment if provided
+      const modifiedPrompt = comment 
+        ? `${concept.imagePrompt}. Additional instructions: ${comment}`
+        : concept.imagePrompt;
+      
+      const base64 = await generateImageForConcept(modifiedPrompt);
+      setImages(prev => ({
+        ...prev,
+        [conceptId]: { id: conceptId, loading: false, base64 }
+      }));
+    } catch (err) {
+      console.error(`Failed to regenerate image for concept ${conceptId}`, err);
+      setImages(prev => ({
+        ...prev,
+        [conceptId]: { id: conceptId, loading: false, error: "Generation failed" }
+      }));
+    }
+  }, [concepts]);
+
   const handleVisualize = useCallback(async () => {
     if (!notes.trim()) return;
 
@@ -131,7 +161,7 @@ const App: React.FC = () => {
               </div>
             </div>
             
-            <ImageGrid concepts={concepts} images={images} />
+            <ImageGrid concepts={concepts} images={images} onRegenerate={handleRegenerate} />
           </section>
         )}
 

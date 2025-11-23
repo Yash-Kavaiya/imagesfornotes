@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { VisualConcept } from "../types";
 
-const apiKey = process.env.API_KEY || '';
+const apiKey = process.env.GEMINI_API_KEY || '';
 const ai = new GoogleGenAI({ apiKey });
 
 // Schema for the analysis step
@@ -73,25 +73,64 @@ export const analyzeNotes = async (notes: string): Promise<VisualConcept[]> => {
 
 export const generateImageForConcept = async (prompt: string): Promise<string> => {
   try {
-    // Using imagen-4.0-generate-001 for high quality visuals
-    const response = await ai.models.generateImages({
-      model: 'imagen-4.0-generate-001',
-      prompt: prompt,
-      config: {
-        numberOfImages: 1,
-        outputMimeType: 'image/jpeg',
-        aspectRatio: '4:3', 
+    console.log("Generating image for prompt:", prompt.substring(0, 100));
+    
+    // Try Google's Imagen API via REST endpoint
+    // Note: The @google/genai SDK may not support imagen models yet
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`;
+    
+    console.log("Calling Imagen API...");
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        instances: [{
+          prompt: prompt
+        }],
+        parameters: {
+          sampleCount: 1,
+          aspectRatio: "4:3"
+        }
+      })
     });
 
-    const base64ImageBytes = response.generatedImages?.[0]?.image?.imageBytes;
-    if (!base64ImageBytes) {
-      throw new Error("No image generated");
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Imagen API error:", errorText);
+      
+      // Fallback to Pollinations.ai
+      console.log("Falling back to Pollinations.ai...");
+      const encodedPrompt = encodeURIComponent(prompt);
+      const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=600&nologo=true&enhance=true&model=flux`;
+      
+      const pollResponse = await fetch(imageUrl);
+      if (!pollResponse.ok) {
+        throw new Error(`All image generation methods failed`);
+      }
+      
+      const blob = await pollResponse.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
     }
 
-    return `data:image/jpeg;base64,${base64ImageBytes}`;
-  } catch (error) {
+    const data = await response.json();
+    console.log("Imagen API response:", data);
+    
+    const imageBase64 = data.predictions?.[0]?.bytesBase64Encoded || data.predictions?.[0]?.image;
+    if (!imageBase64) {
+      throw new Error("No image in response");
+    }
+
+    return `data:image/jpeg;base64,${imageBase64}`;
+  } catch (error: any) {
     console.error("Error generating image:", error);
+    console.error("Error message:", error?.message);
     throw error;
   }
 };
