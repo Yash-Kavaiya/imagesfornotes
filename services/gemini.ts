@@ -1,136 +1,81 @@
+
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { VisualConcept } from "../types";
 
-const apiKey = process.env.GEMINI_API_KEY || '';
-const ai = new GoogleGenAI({ apiKey });
-
-// Schema for the analysis step
-const analysisSchema: Schema = {
-  type: Type.ARRAY,
-  items: {
-    type: Type.OBJECT,
-    properties: {
-      title: { type: Type.STRING, description: "A short, catchy title for the visual concept (2-4 words)." },
-      description: { type: Type.STRING, description: "A brief explanation of what this visual represents relative to the notes." },
-      imagePrompt: { type: Type.STRING, description: "A highly detailed visual description for an image generator. Focus on physical objects, lighting, and composition. DO NOT include requests for text or labels inside the image." },
-    },
-    required: ["title", "description", "imagePrompt"],
-  },
-};
+// Note: API_KEY is handled via the window.aistudio flow in App.tsx
+// But we keep a helper to create the instance with the current process.env.API_KEY
 
 export const analyzeNotes = async (notes: string): Promise<VisualConcept[]> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  
+  const analysisSchema: Schema = {
+    type: Type.ARRAY,
+    items: {
+      type: Type.OBJECT,
+      properties: {
+        title: { type: Type.STRING, description: "A short title for the concept." },
+        description: { type: Type.STRING, description: "Detailed explanation." },
+        imagePrompt: { type: Type.STRING, description: "Detailed visual prompt." },
+      },
+      required: ["title", "description", "imagePrompt"],
+    },
+  };
+
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: `Analyze the following text notes. Break down the key concepts into exactly 6 distinct visual ideas that would help explain these notes.
+      model: "gemini-3-flash-preview",
+      contents: `Analyze these notes and decide on the OPTIMAL number of distinct visual concepts (between 3 and 10) to explain them.
       
-      If the text is short, creatively expand on the implied themes to ensure 6 distinct concepts are generated.
+      For each concept, create a prompt for a high-quality REALISTIC image.
+      Style: "Professional cinematic photography, 8k resolution, highly detailed, realistic textures, natural lighting, shot on 35mm lens."
+      Constraint: NO text, NO diagrams, NO labels. Purely realistic photographic representation.
 
-      For each concept, provide:
-      1. A short title.
-      2. A brief description.
-      3. A detailed image generation prompt. 
-         Style Guide: "High-fidelity 3D isometric render, soft studio lighting, matte aesthetic, vibrant colors, clean background."
-         Constraint: Do NOT describe text, letters, or diagrams containing words. The image should be purely symbolic or representational.
-      
-      Text Notes:
-      "${notes}"`,
+      Notes: "${notes}"`,
       config: {
         responseMimeType: "application/json",
         responseSchema: analysisSchema,
-        temperature: 0.7,
       },
     });
 
-    if (!response.text) {
-      throw new Error("No response from AI");
-    }
-
-    let data;
-    try {
-      data = JSON.parse(response.text);
-    } catch (e) {
-      console.error("JSON Parse Error", response.text);
-      throw new Error("Failed to parse AI response");
-    }
-    
-    // Handle potential wrapping in response
-    const items = Array.isArray(data) ? data : (data.items || []);
-
-    // Ensure we have IDs
-    return items.map((item: any, index: number) => ({
-      title: item.title || `Concept ${index + 1}`,
-      description: item.description || "Visual explanation",
-      imagePrompt: item.imagePrompt || "A nice visual representation",
+    const data = JSON.parse(response.text || '[]');
+    return data.map((item: any, index: number) => ({
+      ...item,
       id: index,
-    })).slice(0, 6);
-
+    }));
   } catch (error) {
-    console.error("Error analyzing notes:", error);
+    console.error("Analysis failed", error);
     throw error;
   }
 };
 
-export const generateImageForConcept = async (prompt: string): Promise<string> => {
+export const generateProImage = async (prompt: string): Promise<string> => {
+  // Always create a new instance to get the latest selected key
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  
   try {
-    console.log("Generating image for prompt:", prompt.substring(0, 100));
-    
-    // Try Google's Imagen API via REST endpoint
-    // Note: The @google/genai SDK may not support imagen models yet
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`;
-    
-    console.log("Calling Imagen API...");
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-image-preview',
+      contents: {
+        parts: [{ text: prompt }],
       },
-      body: JSON.stringify({
-        instances: [{
-          prompt: prompt
-        }],
-        parameters: {
-          sampleCount: 1,
-          aspectRatio: "4:3"
-        }
-      })
+      config: {
+        imageConfig: {
+          aspectRatio: "16:9",
+          imageSize: "1K"
+        },
+      },
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Imagen API error:", errorText);
-      
-      // Fallback to Pollinations.ai
-      console.log("Falling back to Pollinations.ai...");
-      const encodedPrompt = encodeURIComponent(prompt);
-      const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=600&nologo=true&enhance=true&model=flux`;
-      
-      const pollResponse = await fetch(imageUrl);
-      if (!pollResponse.ok) {
-        throw new Error(`All image generation methods failed`);
+    for (const part of response.candidates[0].content.parts) {
+      if (part.inlineData) {
+        return `data:image/png;base64,${part.inlineData.data}`;
       }
-      
-      const blob = await pollResponse.blob();
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
     }
-
-    const data = await response.json();
-    console.log("Imagen API response:", data);
-    
-    const imageBase64 = data.predictions?.[0]?.bytesBase64Encoded || data.predictions?.[0]?.image;
-    if (!imageBase64) {
-      throw new Error("No image in response");
-    }
-
-    return `data:image/jpeg;base64,${imageBase64}`;
+    throw new Error("No image part found");
   } catch (error: any) {
-    console.error("Error generating image:", error);
-    console.error("Error message:", error?.message);
+    if (error.message?.includes("Requested entity was not found")) {
+      throw new Error("KEY_RESET_REQUIRED");
+    }
     throw error;
   }
 };

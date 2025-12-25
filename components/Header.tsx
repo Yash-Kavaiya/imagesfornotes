@@ -16,7 +16,7 @@ const Header: React.FC = () => {
         <div className="flex items-center space-x-4 text-sm text-slate-500">
           <span className="hidden sm:flex items-center space-x-1">
             <Sparkles className="w-4 h-4 text-indigo-500" />
-            <span>Powered by Gemini & Flux AI</span>
+            <span>Powered by Gemini & Imagen 3</span>
           </span>
         </div>
       </div>

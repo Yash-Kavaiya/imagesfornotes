@@ -13,8 +13,3 @@ export interface GeneratedImage {
 }
 
 export type AppStatus = 'idle' | 'analyzing' | 'generating' | 'completed' | 'error';
-
-export interface RegenerateOptions {
-  conceptId: number;
-  additionalComment?: string;
-}
