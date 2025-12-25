@@ -2,11 +2,8 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { VisualConcept } from "../types";
 
-// Note: API_KEY is handled via the window.aistudio flow in App.tsx
-// But we keep a helper to create the instance with the current process.env.API_KEY
-
-export const analyzeNotes = async (notes: string): Promise<VisualConcept[]> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+export const analyzeNotes = async (notes: string, apiKey: string): Promise<VisualConcept[]> => {
+  const ai = new GoogleGenAI({ apiKey });
   
   const analysisSchema: Schema = {
     type: Type.ARRAY,
@@ -48,9 +45,8 @@ export const analyzeNotes = async (notes: string): Promise<VisualConcept[]> => {
   }
 };
 
-export const generateProImage = async (prompt: string): Promise<string> => {
-  // Always create a new instance to get the latest selected key
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+export const generateProImage = async (prompt: string, apiKey: string): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey });
   
   try {
     const response = await ai.models.generateContent({
