@@ -3,7 +3,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import Header from './components/Header';
 import NoteInput from './components/NoteInput';
 import ImageGrid from './components/ImageGrid';
-import { analyzeNotes, generateProImage } from './services/gemini';
+import { analyzeNotes, generateImageForConcept } from './services/gemini';
 import { VisualConcept, GeneratedImage, AppStatus } from './types';
 import { LayoutGrid, AlertTriangle, CheckCircle2, Key, ExternalLink } from 'lucide-react';
 
@@ -38,7 +38,7 @@ const App: React.FC = () => {
 
   const handleVisualize = useCallback(async () => {
     if (!notes.trim()) return;
-    
+
     if (!apiKey) {
       setShowKeyInput(true);
       return;
@@ -51,23 +51,23 @@ const App: React.FC = () => {
       setImages({});
 
       // 1. Analyze to get dynamic concepts
-      const analyzedConcepts = await analyzeNotes(notes, apiKey);
+      const analyzedConcepts = await analyzeNotes(notes);
       setConcepts(analyzedConcepts);
-      
+
       // Init loading states
       const initialStates: Record<number, GeneratedImage> = {};
       analyzedConcepts.forEach(c => initialStates[c.id] = { id: c.id, loading: true });
       setImages(initialStates);
-      
+
       setStatus('generating');
 
       // 2. Generate Pro Images (High Quality)
       const imagePromises = analyzedConcepts.map(async (concept, index) => {
         // Stagger to prevent overwhelming the Pro model
         await new Promise(r => setTimeout(r, index * 1200));
-        
+
         try {
-          const base64 = await generateProImage(concept.imagePrompt, apiKey);
+          const base64 = await generateImageForConcept(concept.imagePrompt);
           setImages(prev => ({
             ...prev,
             [concept.id]: { id: concept.id, loading: false, base64 }
@@ -99,7 +99,7 @@ const App: React.FC = () => {
       <Header />
 
       <main className="flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        
+
         {/* Step 0: Key Selection Required UI */}
         {(!hasKey || showKeyInput) && (
           <div className="max-w-2xl mx-auto bg-white p-8 rounded-3xl border-2 border-dashed border-indigo-200 text-center space-y-6 shadow-sm animate-in fade-in zoom-in duration-500">
@@ -128,9 +128,9 @@ const App: React.FC = () => {
                 >
                   Save API Key
                 </button>
-                <a 
-                  href="https://aistudio.google.com/apikey" 
-                  target="_blank" 
+                <a
+                  href="https://aistudio.google.com/apikey"
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="text-sm text-indigo-600 hover:underline flex items-center gap-1"
                 >
@@ -152,14 +152,14 @@ const App: React.FC = () => {
                 AI will decide the best number of realistic visuals to explain your concepts.
               </p>
             </div>
-            
-            <NoteInput 
-              notes={notes} 
-              setNotes={setNotes} 
-              onVisualize={handleVisualize} 
+
+            <NoteInput
+              notes={notes}
+              setNotes={setNotes}
+              onVisualize={handleVisualize}
               isProcessing={status === 'analyzing'}
             />
-            
+
             {globalError && (
               <div className="mt-4 p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start space-x-3 text-rose-700">
                 <AlertTriangle className="w-5 h-5 mt-0.5 flex-shrink-0" />
@@ -182,7 +182,7 @@ const App: React.FC = () => {
                   Visual Guide: <span className="text-indigo-600">{concepts.length} Realistic Concepts</span>
                 </h3>
               </div>
-              
+
               <div className="flex items-center space-x-2">
                 {status === 'generating' && (
                   <span className="text-sm text-indigo-600 font-medium animate-pulse flex items-center bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">
@@ -198,7 +198,7 @@ const App: React.FC = () => {
                 )}
               </div>
             </div>
-            
+
             <ImageGrid concepts={concepts} images={images} />
           </section>
         )}
